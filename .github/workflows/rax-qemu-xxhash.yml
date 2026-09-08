@@ -1,9 +1,12 @@
 name: RAX xxHash QEMU executor
 
 on:
-  push:
+  pull_request:
     branches:
-      - experiment/rax-qemu-xxhash-20260909
+      - main
+    paths:
+      - ".github/workflows/rax-qemu-xxhash.yml"
+      - "run_xxhash_qemu.py"
 
 permissions:
   contents: read
