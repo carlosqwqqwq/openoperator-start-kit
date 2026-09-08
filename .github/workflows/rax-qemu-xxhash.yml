@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/rax-qemu-xxhash.yml"
       - "run_xxhash_qemu.py"
+      - "execute_xxhash_qemu.py"
 
 permissions:
   contents: read
@@ -26,7 +27,7 @@ jobs:
             git make qemu-user gcc-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu libc6-dev-riscv64-cross
       - name: Execute the fixed same-revision intervention
-        run: python run_xxhash_qemu.py
+        run: python execute_xxhash_qemu.py
       - name: Validate the evidence boundary
         run: |
           python - <<'PY'
@@ -46,9 +47,13 @@ jobs:
           assert result['claim_scope']['physical_riscv_performance'] == 'not-claimed'
           assert result['claim_scope']['same_run_m2_ledger'] == 'not-produced'
           PY
-      - uses: actions/upload-artifact@v4
+      - name: Upload successful or failed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: rax-xxhash-qemu-${{ github.run_id }}
-          path: /tmp/rax-xxhash-qemu
-          if-no-files-found: error
+          path: |
+            /tmp/rax-xxhash-qemu
+            /tmp/.rax-xxhash-qemu.*
+          if-no-files-found: warn
           retention-days: 14
