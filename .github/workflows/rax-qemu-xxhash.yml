@@ -1,0 +1,51 @@
+name: RAX xxHash QEMU executor
+
+on:
+  push:
+    branches:
+      - experiment/rax-qemu-xxhash-20260909
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install QEMU and the RISC-V cross toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git make qemu-user gcc-riscv64-linux-gnu \
+            binutils-riscv64-linux-gnu libc6-dev-riscv64-cross
+      - name: Execute the fixed same-revision intervention
+        run: python run_xxhash_qemu.py
+      - name: Validate the evidence boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('/tmp/rax-xxhash-qemu')
+          result = json.loads((root / 'result.json').read_text())
+          assert result['status'] == 'complete'
+          assert result['correctness']['status'] == 'pass'
+          assert result['correctness']['cross_variant_inputs'] == 42
+          assert result['activation']['rvv']['target_vector_operations'] > 0
+          assert result['activation']['scalar']['target_vector_instructions'] == 0
+          assert len(result['endpoint']['samples_mb_s']['rvv']) == 5
+          assert len(result['endpoint']['samples_mb_s']['scalar']) == 5
+          assert result['claim_scope']['qemu_relative_timing'] == 'measured'
+          assert result['claim_scope']['physical_riscv_performance'] == 'not-claimed'
+          assert result['claim_scope']['same_run_m2_ledger'] == 'not-produced'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rax-xxhash-qemu-${{ github.run_id }}
+          path: /tmp/rax-xxhash-qemu
+          if-no-files-found: error
+          retention-days: 14
