@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Apply the one execution-directory fix, then run the frozen experiment."""
+"""Apply the execution-directory fix and preserve failed evidence."""
 
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import run_xxhash_qemu as experiment
 
 _original_run = experiment._run
+_original_rmtree = experiment.shutil.rmtree
 
 
 def _run(
@@ -27,5 +28,13 @@ def _run(
     )
 
 
+def _rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
+    value = Path(path)
+    if value.name.startswith(".rax-xxhash-qemu."):
+        return
+    _original_rmtree(value, *args, **kwargs)
+
+
 experiment._run = _run
+experiment.shutil.rmtree = _rmtree
 raise SystemExit(experiment.main())
