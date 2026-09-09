@@ -1,0 +1,57 @@
+name: RAX public QEMU smoke and Boost.UUID replay
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/rax-qemu-smoke-boost.yml"
+      - "qemu_suite.py.gz.b64"
+
+permissions:
+  contents: read
+
+jobs:
+  qemu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install QEMU and RISC-V build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git qemu-user gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
+            binutils-riscv64-linux-gnu libc6-dev-riscv64-cross libboost-dev
+      - name: Decode fixed experiment
+        run: base64 -d qemu_suite.py.gz.b64 | gzip -d > /tmp/qemu_suite.py
+      - name: Execute QEMU-only experiments
+        run: python /tmp/qemu_suite.py
+      - name: Validate result boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('/tmp/rax-qemu-suite/result.json').read_text())
+          assert result['status'] == 'complete'
+          smoke = result['experiments']['rvv_smoke']
+          assert smoke['status'] == 'pass'
+          assert all(v['case_count'] == 16 for v in smoke['contexts'].values())
+          assert all(v['activation']['vector_operations'] > 0 for v in smoke['contexts'].values())
+          boost = result['experiments']['boost_uuid']
+          assert boost['status'] == 'pass'
+          assert boost['claim_scope']['physical_riscv_performance'] == 'not-claimed'
+          for context in ('vlen128', 'vlen256'):
+              assert boost['activation'][context]['candidate-rvv']['vector_operations'] > 0
+              assert boost['activation'][context]['candidate-generic']['vector_operations'] == 0
+              assert len(boost['measurement'][context]['cases']) == 7
+          PY
+      - name: Upload successful or failed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rax-qemu-smoke-boost-${{ github.run_id }}
+          path: /tmp/rax-qemu-suite
+          if-no-files-found: warn
+          retention-days: 14
