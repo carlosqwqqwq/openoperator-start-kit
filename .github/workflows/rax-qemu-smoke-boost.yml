@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/rax-qemu-smoke-boost.yml"
-      - "qemu_suite.py.gz.b64"
+      - "qemu_suite.*.part"
 
 permissions:
   contents: read
@@ -25,7 +25,7 @@ jobs:
             git qemu-user gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu libc6-dev-riscv64-cross libboost-dev
       - name: Decode fixed experiment
-        run: base64 -d qemu_suite.py.gz.b64 | gzip -d > /tmp/qemu_suite.py
+        run: cat qemu_suite.*.part | base64 -d | gzip -d > /tmp/qemu_suite.py
       - name: Execute QEMU-only experiments
         run: python /tmp/qemu_suite.py
       - name: Validate result boundary
