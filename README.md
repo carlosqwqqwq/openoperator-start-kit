@@ -72,3 +72,7 @@
 2. 尽量在调试服务器debug，远程评估时通过阅读commit评论中的报错进行debug
 3. 系统只接收`main`分支的提交，所以请分时开发或者做好分支管理
 4. github评论是执行结束第一时间更新的，排行榜是周期性更新的，且只会记录团队历史最好成绩
+
+## Temporary download bridge
+
+[xPack QEMU RISC-V 8.2.2-1 Linux x64](https://github.com/xpack-dev-tools/qemu-riscv-xpack/releases/download/v8.2.2-1/xpack-qemu-riscv-8.2.2-1-linux-x64.tar.gz)
