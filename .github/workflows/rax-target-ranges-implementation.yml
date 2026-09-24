@@ -26,6 +26,7 @@ jobs:
       - name: Apply, validate, and publish implementation
         shell: bash
         run: |
+          # runner payload revision 2
           base64 -d rax-target-ranges/run_range_impl.sh.gz.b64 \
             | gzip -d > /tmp/run_range_impl.sh
           chmod 700 /tmp/run_range_impl.sh
