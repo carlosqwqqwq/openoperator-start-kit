@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: rax-pr559-validation
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -37,43 +37,29 @@ jobs:
 
           git config user.name "rax-validation-bot"
           git config user.email "102978772+carlosqwqqwq@users.noreply.github.com"
+          git pull --rebase origin main
           git add rax-pr559/public-key.pem
           git commit -m "ci: publish one-time PR559 validation key"
           git push origin main
 
           found=0
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 90); do
             git pull --rebase origin main >/dev/null 2>&1 || true
             if [[ -s rax-pr559/token.enc.b64 ]]; then
               found=1
               break
             fi
-            sleep 5
+            sleep 1
           done
-
-          if [[ "$found" -ne 1 ]]; then
-            printf '{"schema":"rax.pr-validation.v1","status":"credential-timeout"}\n' \
-              > rax-pr559/result.json
-            git add rax-pr559/result.json
-            git commit -m "ci: record PR559 validation timeout" || true
-            git push origin main || true
-            exit 2
-          fi
+          [[ "$found" -eq 1 ]] || exit 2
 
           base64 -d rax-pr559/token.enc.b64 > /tmp/rax-pr559-token.enc
-          if ! openssl pkeyutl -decrypt \
-              -inkey /tmp/rax-pr559-private.pem \
-              -in /tmp/rax-pr559-token.enc \
-              -pkeyopt rsa_padding_mode:oaep \
-              -pkeyopt rsa_oaep_md:sha256 \
-              -out /tmp/rax-pr559-token; then
-            printf '{"schema":"rax.pr-validation.v1","status":"credential-decrypt-failed"}\n' \
-              > rax-pr559/result.json
-            git add rax-pr559/result.json
-            git commit -m "ci: record PR559 credential failure" || true
-            git push origin main || true
-            exit 3
-          fi
+          openssl pkeyutl -decrypt \
+            -inkey /tmp/rax-pr559-private.pem \
+            -in /tmp/rax-pr559-token.enc \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -out /tmp/rax-pr559-token
           chmod 600 /tmp/rax-pr559-token
 
           cat > /tmp/rax-pr559-askpass <<'ASKPASS'
@@ -85,14 +71,13 @@ jobs:
           esac
           ASKPASS
           chmod 700 /tmp/rax-pr559-askpass
-
           export GIT_ASKPASS=/tmp/rax-pr559-askpass
           export GIT_TERMINAL_PROMPT=0
+
           clone_rc=0
           git clone --single-branch --branch fix/honest-route-evidence-20260924 \
-            https://github.com/carlosqwqqwq/rax-research.git /tmp/rax-research \
+            https://github.com/carlosqwqqwq/rax-research.git /tmp/rax-pr559-repo \
             >/tmp/rax-pr559-clone.log 2>&1 || clone_rc=$?
-
           install_rc=99
           targeted_rc=99
           ruff_rc=99
@@ -100,17 +85,15 @@ jobs:
           full_rc=99
           head_sha=""
           if [[ "$clone_rc" -eq 0 ]]; then
-            cd /tmp/rax-research
+            cd /tmp/rax-pr559-repo
             head_sha="$(git rev-parse HEAD)"
             git submodule update --init --recursive \
               >/tmp/rax-pr559-submodules.log 2>&1 || true
-
             python -m pip install --upgrade pip \
               >/tmp/rax-pr559-install.log 2>&1
             python -m pip install -e ".[dev,agent]" \
               >>/tmp/rax-pr559-install.log 2>&1
             install_rc=$?
-
             if [[ "$install_rc" -eq 0 ]]; then
               python -m pytest -q tests/test_real_repo_adapter.py \
                 >/tmp/rax-pr559-targeted.log 2>&1
@@ -125,8 +108,7 @@ jobs:
                 benchmarks/real_repos src/rax tests/test_real_repo_adapter.py \
                 >/tmp/rax-pr559-compile.log 2>&1
               compile_rc=$?
-              python -m pytest -q \
-                >/tmp/rax-pr559-full.log 2>&1
+              python -m pytest -q >/tmp/rax-pr559-full.log 2>&1
               full_rc=$?
             fi
           fi
@@ -139,28 +121,22 @@ jobs:
           from pathlib import Path
 
           names = (
-              "clone_rc",
-              "install_rc",
-              "targeted_pytest_rc",
-              "ruff_rc",
-              "compileall_rc",
-              "full_pytest_rc",
+              "clone_rc", "install_rc", "targeted_pytest_rc",
+              "ruff_rc", "compileall_rc", "full_pytest_rc",
           )
           values = [int(value) for value in sys.argv[1:7]]
-          head_sha = sys.argv[7]
           logs = {}
           for name in ("clone", "submodules", "install", "targeted", "ruff", "compile", "full"):
               path = Path(f"/tmp/rax-pr559-{name}.log")
               if path.exists():
                   text = path.read_text(encoding="utf-8", errors="replace")
-                  logs[name] = "\n".join(text.splitlines()[-80:])
-          status = "pass" if values == [0, 0, 0, 0, 0, 0] else "fail"
+                  logs[name] = "\n".join(text.splitlines()[-120:])
           payload = {
               "schema": "rax.pr-validation.v1",
-              "status": status,
+              "status": "pass" if values == [0, 0, 0, 0, 0, 0] else "fail",
               "repository": "carlosqwqqwq/rax-research",
               "branch": "fix/honest-route-evidence-20260924",
-              "head_sha": head_sha,
+              "head_sha": sys.argv[7],
               **dict(zip(names, values, strict=True)),
               "log_tails": logs,
           }
